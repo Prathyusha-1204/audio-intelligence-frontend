@@ -1,23 +1,153 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
-<title>Audio Intelligence</title>
-<link rel="stylesheet" href="/static/style.css">
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Audio Intelligence Pipeline</title>
+    <!-- Modern Typography -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css">
 </head>
-
 <body>
+    <div class="app-container">
+        <header class="header">
+            <h1 class="gradient-text">Audio Intelligence Web</h1>
+            <p class="subtitle">Securely deploy audio for asynchronous transcription & generative summarization in AWS.</p>
+        </header>
 
-<h1>Audio Intelligence System</h1>
+        <main class="main-content">
+            <div id="upload-zone" class="upload-zone">
+                <input type="file" id="audio-input" name="audio" accept="audio/*" class="hidden-input">
+                <div class="upload-icon">
+                    <svg width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+                        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                        <polyline points="17 8 12 3 7 8"></polyline>
+                        <line x1="12" y1="3" x2="12" y2="15"></line>
+                    </svg>
+                </div>
+                <h3 class="zone-title">Drop your MP3 or WAV file here</h3>
+                <p class="zone-subtitle">or click to browse your files</p>
+                <div class="selected-file-info hidden" id="file-info">
+                    <span id="file-name"></span>
+                </div>
+            </div>
 
-<form action="/upload" method="post" enctype="multipart/form-data">
+            <div class="actions">
+                <button id="upload-btn" class="upload-btn disabled">
+                    <span class="btn-text">Initiate Pipeline</span>
+                    <div class="loader hidden" id="loader"></div>
+                </button>
+            </div>
 
-<input type="file" name="audio" required>
+            <div id="status-container" class="status-message hidden"></div>
+        </main>
+    </div>
 
-<br><br>
+    <script>
+        const dropZone = document.getElementById('upload-zone');
+        const fileInput = document.getElementById('audio-input');
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileInfo = document.getElementById('file-info');
+        const fileNameDisplay = document.getElementById('file-name');
+        const statusContainer = document.getElementById('status-container');
+        const loader = document.getElementById('loader');
+        const btnText = document.querySelector('.btn-text');
 
-<button type="submit">Upload Audio</button>
+        let selectedFile = null;
 
-</form>
+        // Trigger file input dialog on click
+        dropZone.addEventListener('click', () => fileInput.click());
 
+        // File input change
+        fileInput.addEventListener('change', (e) => {
+            handleFiles(e.target.files);
+        });
+
+        // Drag and drop setup
+        ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, preventDefaults, false);
+        });
+
+        function preventDefaults(e) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+
+        ['dragenter', 'dragover'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.add('highlight'), false);
+        });
+
+        ['dragleave', 'drop'].forEach(eventName => {
+            dropZone.addEventListener(eventName, () => dropZone.classList.remove('highlight'), false);
+        });
+
+        dropZone.addEventListener('drop', (e) => {
+            let dt = e.dataTransfer;
+            let files = dt.files;
+            handleFiles(files);
+        });
+
+        function handleFiles(files) {
+            if (files.length > 0) {
+                selectedFile = files[0];
+                fileNameDisplay.textContent = selectedFile.name;
+                fileInfo.classList.remove('hidden');
+                uploadBtn.classList.remove('disabled');
+                statusContainer.classList.add('hidden');
+            }
+        }
+
+        // Upload Button Click
+        uploadBtn.addEventListener('click', async (e) => {
+            e.stopPropagation();
+            if (!selectedFile || uploadBtn.classList.contains('disabled')) return;
+
+            // UI State updates
+            uploadBtn.classList.add('disabled');
+            btnText.textContent = "Uploading...";
+            loader.classList.remove('hidden');
+            statusContainer.classList.add('hidden');
+            statusContainer.className = 'status-message'; // reset classes
+
+            const formData = new FormData();
+            formData.append('audio', selectedFile);
+
+            try {
+                const response = await fetch('/upload', {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const result = await response.json();
+
+                if (response.ok) {
+                    showStatus(result.message, 'success');
+                    resetUploadState();
+                } else {
+                    showStatus(result.error || "Upload failed", 'error');
+                }
+            } catch (error) {
+                showStatus("Network error occurred: " + error.message, 'error');
+            } finally {
+                // Restore button state
+                btnText.textContent = "Initiate Pipeline";
+                loader.classList.add('hidden');
+                if (selectedFile) uploadBtn.classList.remove('disabled');
+            }
+        });
+
+        function showStatus(message, type) {
+            statusContainer.textContent = message;
+            statusContainer.classList.remove('hidden');
+            statusContainer.classList.add(type);
+        }
+
+        function resetUploadState() {
+            selectedFile = null;
+            fileInput.value = '';
+            fileInfo.classList.add('hidden');
+            uploadBtn.classList.add('disabled');
+        }
+    </script>
 </body>
 </html>
