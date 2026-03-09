@@ -40,6 +40,11 @@
             </div>
 
             <div id="status-container" class="status-message hidden"></div>
+
+            <div id="summary-container" class="summary-container hidden">
+                <h3 class="summary-title">Intelligence Distillation</h3>
+                <div id="summary-content" class="summary-content"></div>
+            </div>
         </main>
     </div>
 
@@ -122,19 +127,54 @@
 
                 if (response.ok) {
                     showStatus(result.message, 'success');
-                    resetUploadState();
+                    uploadBtn.classList.add('hidden'); // Hide upload button during processing
+                    pollForSummary(selectedFile.name);
                 } else {
                     showStatus(result.error || "Upload failed", 'error');
+                    resetUploadState();
                 }
             } catch (error) {
                 showStatus("Network error occurred: " + error.message, 'error');
-            } finally {
-                // Restore button state
-                btnText.textContent = "Initiate Pipeline";
-                loader.classList.add('hidden');
-                if (selectedFile) uploadBtn.classList.remove('disabled');
+                resetUploadState();
             }
         });
+
+        async function pollForSummary(filename) {
+            const summaryContainer = document.getElementById('summary-container');
+            const summaryContent = document.getElementById('summary-content');
+            
+            showStatus("Pipeline Running: Transcribing and distilling audio... (this may take 2-4 minutes)", "success");
+            loader.classList.remove('hidden');
+
+            const pollInterval = setInterval(async () => {
+                try {
+                    const response = await fetch(`/summary/${encodeURIComponent(filename)}`);
+                    if (response.status === 200) {
+                        const data = await response.json();
+                        clearInterval(pollInterval);
+                        
+                        // Display the summary
+                        statusContainer.classList.add('hidden');
+                        loader.classList.add('hidden');
+                        summaryContainer.classList.remove('hidden');
+                        summaryContent.innerHTML = data.summary.replace(/\n/g, '<br>');
+                        
+                        // Show a reset button
+                        uploadBtn.classList.remove('hidden');
+                        btnText.textContent = "Upload Another File";
+                        uploadBtn.onclick = () => location.reload();
+                    } else if (response.status !== 202) {
+                        // If it's not 202 (processing), it's a real error
+                        clearInterval(pollInterval);
+                        showStatus("Failed to retrieve summary.", "error");
+                        loader.classList.add('hidden');
+                        uploadBtn.classList.remove('hidden');
+                    }
+                } catch (error) {
+                    console.error("Polling error:", error);
+                }
+            }, 10000); // Check S3 every 10 seconds
+        }
 
         function showStatus(message, type) {
             statusContainer.textContent = message;
@@ -143,10 +183,9 @@
         }
 
         function resetUploadState() {
-            selectedFile = null;
-            fileInput.value = '';
-            fileInfo.classList.add('hidden');
-            uploadBtn.classList.add('disabled');
+            btnText.textContent = "Initiate Pipeline";
+            loader.classList.add('hidden');
+            if (selectedFile) uploadBtn.classList.remove('disabled');
         }
     </script>
 </body>

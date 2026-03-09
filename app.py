@@ -22,6 +22,7 @@ if os.environ.get('AWS_REGION'):
 s3 = boto3.client('s3', **s3_client_kwargs)
 
 BUCKET_NAME = os.environ.get('S3_INPUT_BUCKET_NAME', 'audio-input-bucket-sai-us')
+OUTPUT_BUCKET_NAME = os.environ.get('S3_OUTPUT_BUCKET_NAME', 'audio-output-bucket-sai-us')
 
 @app.route("/")
 def home():
@@ -48,6 +49,23 @@ def upload():
             return jsonify({"message": f"File '{filename}' safely vaulted in S3."}), 200
         except Exception as e:
             return jsonify({"error": str(e)}), 500
+
+@app.route("/summary/<filename>", methods=["GET"])
+def get_summary(filename):
+    try:
+        # The Lambda uses the job_name (filename without extension) to save the summary
+        job_name = filename.rsplit('.', 1)[0]
+        summary_key = f"{job_name}_summary.txt"
+        
+        response = s3.get_object(Bucket=OUTPUT_BUCKET_NAME, Key=summary_key)
+        summary_text = response['Body'].read().decode('utf-8')
+        
+        return jsonify({"summary": summary_text}), 200
+    except s3.exceptions.NoSuchKey:
+        # Pipeline is still processing
+        return jsonify({"status": "processing"}), 202
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
 
 if __name__ == "__main__":
     app.run(host="0.0.0.0", port=5000, debug=True)
